@@ -1,0 +1,1189 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard App v2 - Tricomaster</title>
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --primary-green: rgb(1, 52, 37);
+            --accent-gold: #c5a365;
+            --bg-light-gray: #F3F4F6;
+            --month-alt-gray: #FAFAFA;
+            --card-white: #FFFFFF;
+            --text-dark-gray: #1F2937;
+            --text-medium-gray: #6B7281;
+            --ring: #a7f3d0;
+            --danger: #b91c1c;
+            --success: #065f46;
+            --warning: #b45309;
+        }
+        html { font-family: 'Inter', sans-serif; }
+        body { margin: 0; display: flex; height: 100vh; background: var(--bg-light-gray); color: var(--text-dark-gray); overflow: hidden; }
+        .sidebar { width: 256px; background: var(--primary-green); color: #fff; display: flex; flex-direction: column; position: fixed; height: 100%; flex-shrink: 0; }
+        .sidebar .logo { padding: 24px; font-size: 1.5rem; font-weight: 700; text-align: center; }
+        .sidebar nav ul { list-style: none; padding: 0; margin: 0; }
+        .sidebar nav li { cursor: pointer; }
+        .sidebar nav a { display: flex; align-items: center; gap: 12px; padding: 12px 24px; color: #fff; text-decoration: none; font-weight: 500; pointer-events: none; }
+        .sidebar nav li:hover { background: rgba(255, 255, 255, .1); }
+        .sidebar nav .active { background: var(--accent-gold); }
+        .sidebar nav .active a { color: var(--primary-green); }
+        .main-content { margin-left: 256px; flex-grow: 1; display: flex; flex-direction: column; overflow-y: auto; }
+        header { background: var(--card-white); color: var(--text-dark-gray); padding: 16px 32px; position: sticky; top: 0; z-index: 10; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; }
+        header h1 { margin: 0; font-size: 1.25rem; font-weight: 600; }
+        main { padding: 32px; }
+        .page { display: none; }
+        .page.active { display: block; }
+        .card { background: var(--card-white); border-radius: 12px; box-shadow: 0 8px 18px rgba(0, 0, 0, .05); padding: 24px; }
+        .card h3 { margin: 0 0 16px 0; font-size: 1.2rem; font-weight: 700; color: var(--primary-green); border-bottom: 1px solid #eee; padding-bottom: 12px; }
+        .filters { display: flex; gap: 16px; margin-bottom: 24px; padding: 16px; background: var(--card-white); border-radius: 12px; flex-wrap: wrap; align-items: center; }
+        .inline-field { display: flex; align-items: center; gap: 8px; }
+        .inline-field label { font-weight: 700; }
+        input[type="month"], select, input[type="number"], input[type="text"] { padding: 10px 12px; border-radius: 10px; border: 1px solid #d1d5db; font-size: 1rem; background: #fff; transition: box-shadow .15s ease, border-color .15s ease; }
+        input[type="month"]:focus, select:focus, input:focus { outline: none; border-color: var(--primary-green); box-shadow: 0 0 0 4px var(--ring); }
+        .btn { padding: 10px 16px; border-radius: 10px; border: none; font-size: 0.95rem; font-weight: 700; cursor: pointer; transition: transform .05s ease, filter .15s; }
+        .btn:active { transform: scale(0.99); }
+        .btn-primary { background: var(--primary-green); color: #fff; }
+        .btn-secondary { background: var(--accent-gold); color: var(--primary-green); }
+        .btn-danger { background: var(--danger); color: #fff; }
+        .table-wrapper { overflow-x: auto; overflow-y: visible; }
+        .comparison-table { width: max-content; min-width: 100%; border-collapse: collapse; table-layout: fixed; }
+        .comparison-table th, .comparison-table td { padding: 12px 16px; border: 1px solid #e5e7eb; text-align: left; vertical-align: middle; min-width: 140px; white-space: nowrap; }
+        .comparison-table thead { background: var(--bg-light-gray); }
+        .comparison-table .group-header th { background-color: var(--primary-green); color: white; text-align: left; font-weight: bold; padding-left: 16px; }
+        .sticky-col { position: sticky; left: 0; z-index: 2; font-weight: 500; }
+        .comparison-table thead .sticky-col { background: var(--bg-light-gray) !important; }
+        .comparison-table tbody .sticky-col { background: var(--card-white) !important; }
+        .month-alt { background-color: var(--month-alt-gray) !important; }
+        .empty { padding: 24px; color: var(--text-medium-gray); text-align: center; }
+        #toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; }
+        .toast { padding: 12px 20px; color: white; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, .15); opacity: 0; transform: translateX(100%); animation: toast-in .5s forwards; }
+        .toast.success { background-color: var(--success); }
+        .toast.danger { background-color: var(--danger); }
+        .toast.warning { background-color: var(--warning); }
+        @keyframes toast-in { to { opacity: 1; transform: translateX(0); } }
+
+        /* Lançar Dados - Tabs */
+        .tabs { display: flex; flex-wrap: wrap; gap: 8px; border-bottom: 2px solid #e5e7eb; margin-bottom: 24px; }
+        .tab-btn { padding: 12px 20px; cursor: pointer; border: none; background: transparent; font-size: 1rem; font-weight: 600; color: var(--text-medium-gray); border-bottom: 3px solid transparent; }
+        .tab-btn.active { color: var(--primary-green); border-bottom-color: var(--primary-green); }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* Dashboard v2 */
+        .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 24px; }
+        .dashboard-section h2 { font-size: 1.5rem; color: var(--primary-green); margin: 32px 0 16px; border-bottom: 2px solid var(--accent-gold); padding-bottom: 8px; }
+        .kpi-card { display: flex; flex-direction: column; gap: 12px; }
+        .kpi-item { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 8px; border-bottom: 1px solid #f3f4f6; }
+        .kpi-label { font-size: 0.95rem; color: var(--text-medium-gray); }
+        .kpi-value { font-size: 1.25rem; font-weight: 700; color: var(--text-dark-gray); }
+        .kpi-value.small { font-size: 1rem; }
+        .chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 24px; margin-top: 32px; }
+        .chart-container { position: relative; height: 350px; }
+
+        /* Impressão */
+        @media print {
+            body { display: block; height: auto; overflow: visible; background: #fff; }
+            .sidebar, header, .filters, .btn, #toast-container, nav { display: none !important; }
+            .main-content { margin-left: 0; }
+            main { padding: 10px; }
+            .page { display: block !important; }
+            .card { box-shadow: none; border: 1px solid #ddd; border-radius: 0; page-break-inside: avoid; }
+            .dashboard-grid, .chart-grid { grid-template-columns: 1fr 1fr; }
+            .table-wrapper { overflow: hidden; }
+            #page-config, #page-comparativo, #page-comparativo-detalhado { display: none !important; }
+            .print-header { display: block !important; text-align: center; margin-bottom: 20px; }
+            .print-header h1 { font-size: 24px; color: var(--primary-green); }
+            .print-header p { font-size: 14px; color: var(--text-medium-gray); }
+        }
+        .print-header { display: none; }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="logo"><h2>Tricomaster v2</h2></div>
+        <nav>
+            <ul>
+                <li id="nav-dashboard" data-page="dashboard"><a href="#">Dashboard</a></li>
+                <li id="nav-comparativo" data-page="comparativo"><a href="#">Comparativo</a></li>
+                <li id="nav-comparativo-detalhado" data-page="comparativo-detalhado"><a href="#">Comparativo Detalhado</a></li>
+                <li id="nav-config" data-page="config"><a href="#">Lançar Dados</a></li>
+            </ul>
+        </nav>
+    </div>
+    <div class="main-content">
+        <header>
+            <h1 id="page-title">Dashboard</h1>
+            <button id="print-btn" class="btn btn-secondary">Imprimir Relatório</button>
+        </header>
+        <main>
+            <div class="print-header">
+                <h1>Relatório de Performance - Tricomaster</h1>
+                <p id="print-period"></p>
+            </div>
+
+            <div id="page-dashboard" class="page">
+                <div class="filters">
+                    <div class="inline-field">
+                        <label>Tipo</label>
+                        <label class="inline-field" style="gap:6px"><input type="radio" name="dash-type" value="pair" checked> Dois meses</label>
+                        <label class="inline-field" style="gap:6px"><input type="radio" name="dash-type" value="arc"> Arco</label>
+                    </div>
+                    <div class="inline-field">
+                        <label for="dash-start">Início</label>
+                        <input id="dash-start" type="month">
+                    </div>
+                    <div class="inline-field">
+                        <label for="dash-end">Final</label>
+                        <input id="dash-end" type="month">
+                    </div>
+                    <button id="dash-refresh" class="btn btn-primary">Atualizar</button>
+                </div>
+                <div id="dashboard-content"><div class="card empty">A carregar dados...</div></div>
+            </div>
+
+            <div id="page-comparativo" class="page">
+                 <div class="filters">
+                    <div class="inline-field">
+                        <label>Tipo</label>
+                        <label class="inline-field" style="gap:6px"><input type="radio" name="cmp-type" value="pair" checked> Dois meses</label>
+                        <label class="inline-field" style="gap:6px"><input type="radio" name="cmp-type" value="arc"> Arco</label>
+                    </div>
+                    <div class="inline-field">
+                        <label for="cmp-start">Início</label> <input id="cmp-start" type="month">
+                    </div>
+                    <div class="inline-field">
+                        <label for="cmp-end">Final</label> <input id="cmp-end" type="month">
+                    </div>
+                    <button id="cmp-export" class="btn btn-primary">Exportar Excel</button>
+                </div>
+                <div class="table-wrapper"><div id="cmp-result"></div></div>
+            </div>
+
+            <div id="page-comparativo-detalhado" class="page">
+                <div class="filters">
+                    <div class="inline-field">
+                        <label>Tipo</label>
+                        <label class="inline-field" style="gap:6px"><input type="radio" name="cmpd-type" value="pair" checked> Dois meses</label>
+                        <label class="inline-field" style="gap:6px"><input type="radio" name="cmpd-type" value="arc"> Arco</label>
+                    </div>
+                    <div class="inline-field">
+                        <label for="cmpd-start">Início</label> <input id="cmpd-start" type="month">
+                    </div>
+                    <div class="inline-field">
+                        <label for="cmpd-end">Final</label> <input id="cmpd-end" type="month">
+                    </div>
+                    <button id="cmpd-export" class="btn btn-primary">Exportar Excel</button>
+                </div>
+                <div class="table-wrapper"><div id="cmpd-result"></div></div>
+            </div>
+
+            <div id="page-config" class="page">
+                <div class="card">
+                    <div class="filters" style="gap:16px">
+                        <div class="inline-field">
+                            <label for="form-month">Mês</label> <select id="form-month"></select>
+                        </div>
+                        <div class="inline-field">
+                            <label for="form-year">Ano</label> <select id="form-year"></select>
+                        </div>
+                        <button id="save-month-btn" class="btn btn-primary">Salvar</button>
+                        <button id="clear-month-btn" class="btn btn-danger">Limpar Mês</button>
+                        <span style="flex-grow:1"></span>
+                        <button id="export-json-btn" class="btn btn-secondary">Exportar JSON</button>
+                        <button id="import-json-btn" class="btn btn-secondary">Importar JSON</button>
+                        <input type="file" id="json-file-input" accept=".json" style="display:none">
+                    </div>
+
+                    <div class="tabs" id="form-tabs"></div>
+                    <div id="form-tab-contents"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+<script type="module">
+// Importar SDKs do Firebase
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getFirestore, doc, onSnapshot, setDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+// Variáveis Globais de Firebase e de Dados
+let db, auth, userId;
+let appData = {}; // Cache local dos dados do Firestore
+
+// Variáveis de ambiente (fornecidas pela plataforma)
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+const userFirebaseConfig = {
+    apiKey: "AIzaSyAeoC4N2Iy2yZjflDg9lcTdA5diUluYZpA",
+    authDomain: "dash-freedom.firebaseapp.com",
+    projectId: "dash-freedom",
+    storageBucket: "dash-freedom.firebasestorage.app",
+    messagingSenderId: "656403884828",
+    appId: "1:656403884828:web:ce57cca624d166d285e8d9"
+};
+
+let firebaseConfig;
+try {
+    firebaseConfig = (typeof __firebase_config !== 'undefined' && __firebase_config && __firebase_config !== "{}") 
+        ? JSON.parse(__firebase_config) 
+        : userFirebaseConfig;
+} catch (e) {
+    console.warn("Could not parse __firebase_config, falling back to user config.", e);
+    firebaseConfig = userFirebaseConfig;
+}
+
+const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+
+// Inicializar Firebase
+const app = initializeApp(firebaseConfig);
+db = getFirestore(app);
+auth = getAuth(app);
+// setLogLevel('debug'); // Descomentar para logs detalhados do Firestore
+
+const MONTHS = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+const chartInstances = {};
+
+/* =================================
+  NOVO MODELO DE DADOS E MÉTRICAS v2
+ ================================= */
+const METRIC_GROUPS = {
+    'Faturamento': 'Faturamento',
+    'Consultas': 'Consultas',
+    'Leads & Tráfego': 'Leads & Tráfego',
+    'Conversão & Protocolos': 'Conversão & Protocolos',
+    'Financeiro Mkt': 'Financeiro de Mkt',
+};
+
+const METRICS_DEFINITIONS = [
+    // Entradas
+    { id: "fat_total", label: "Faturamento Total", type: 'currency', group: METRIC_GROUPS['Faturamento'], is_input: true },
+    { id: "fat_primeira", label: "Faturamento 1ª Consulta", type: 'currency', group: METRIC_GROUPS['Faturamento'], is_input: true },
+    { id: "fat_nova", label: "Faturamento Nova Consulta", type: 'currency', group: METRIC_GROUPS['Faturamento'], is_input: true },
+    { id: "fat_protocolos_primeira", label: "Faturamento Protocolos 1ª Consulta", type: 'currency', group: METRIC_GROUPS['Faturamento'], is_input: true },
+    { id: "fat_protocolos_nova", label: "Faturamento Protocolos Nova Consulta", type: 'currency', group: METRIC_GROUPS['Faturamento'], is_input: true },
+    { id: "qtd_primeira", label: "Qtd. 1ª Consulta", type: 'number', group: METRIC_GROUPS['Consultas'], is_input: true },
+    { id: "qtd_nova", label: "Qtd. Novas Consultas", type: 'number', group: METRIC_GROUPS['Consultas'], is_input: true },
+    { id: "leads_google", label: "Leads Google", type: 'number', group: METRIC_GROUPS['Leads & Tráfego'], is_input: true },
+    { id: "leads_instagram", label: "Leads Instagram", type: 'number', group: METRIC_GROUPS['Leads & Tráfego'], is_input: true },
+    { id: "leads_outros", label: "Leads Outros (Orgânico, etc)", type: 'number', group: METRIC_GROUPS['Leads & Tráfego'], is_input: true },
+    { id: "protocolos_primeira", label: "Qtd. Protocolos 1ª Consulta", type: 'number', group: METRIC_GROUPS['Conversão & Protocolos'], is_input: true },
+    { id: "protocolos_nova", label: "Qtd. Protocolos Nova Consulta", type: 'number', group: METRIC_GROUPS['Conversão & Protocolos'], is_input: true },
+    { id: "gasto_google", label: "Gasto Google Ads", type: 'currency', group: METRIC_GROUPS['Financeiro Mkt'], is_input: true },
+    { id: "gasto_meta", label: "Gasto Meta Ads", type: 'currency', group: METRIC_GROUPS['Financeiro Mkt'], is_input: true },
+    { id: "gasto_agencia", label: "Gasto Agência", type: 'currency', group: METRIC_GROUPS['Financeiro Mkt'], is_input: true },
+    
+    // Derivados
+    { id: "leads_totais", label: "Leads Totais", type: 'number', group: METRIC_GROUPS['Leads & Tráfego'], is_input: false },
+    { id: "consultas_totais", label: "Consultas Totais", type: 'number', group: METRIC_GROUPS['Consultas'], is_input: false },
+    { id: "cpl_geral", label: "CPL Geral", type: 'currency', group: METRIC_GROUPS['Financeiro Mkt'], is_input: false },
+    { id: "cpl_google", label: "CPL Google", type: 'currency', group: METRIC_GROUPS['Financeiro Mkt'], is_input: false },
+    { id: "cpl_instagram", label: "CPL Instagram", type: 'currency', group: METRIC_GROUPS['Financeiro Mkt'], is_input: false },
+    { id: "cpc_geral", label: "CPC Geral", type: 'currency', group: METRIC_GROUPS['Financeiro Mkt'], is_input: false },
+    { id: "ticket_medio_protocolos_1a", label: "Ticket Médio Protocolos 1ª", type: 'currency', group: METRIC_GROUPS['Conversão & Protocolos'], is_input: false },
+    { id: "ticket_medio_protocolos_nova", label: "Ticket Médio Protocolos Nova", type: 'currency', group: METRIC_GROUPS['Conversão & Protocolos'], is_input: false },
+    { id: "pct_prot_sobre_fat_total", label: "% Protocolos / Faturamento Total", type: 'percent', group: METRIC_GROUPS['Faturamento'], is_input: false },
+    { id: "tx_consulta_protocolo_1a", label: "Tx. Consulta -> Protocolo 1ª", type: 'percent', group: METRIC_GROUPS['Conversão & Protocolos'], is_input: false },
+    { id: "tx_consulta_protocolo_nova", label: "Tx. Consulta -> Protocolo Nova", type: 'percent', group: METRIC_GROUPS['Conversão & Protocolos'], is_input: false },
+    { id: "tx_leads_consulta_1a", label: "Tx. Leads -> 1ª Consulta", type: 'percent', group: METRIC_GROUPS['Conversão & Protocolos'], is_input: false },
+];
+
+/* ============================
+  Helpers & Funções Utilitárias
+ ============================ */
+const num = (v) => Number(v) || 0;
+const safeDiv = (num, den) => (den > 0 ? num / den : 0);
+const formatValue = (value, type, forExcel = false) => {
+    if (value === undefined || value === null || !isFinite(value) || (typeof value === 'number' && isNaN(value))) {
+        return forExcel ? null : '—';
+    }
+    if (forExcel) return value;
+    if (type === 'currency') return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    if (type === 'percent') return `${value.toFixed(1)}%`;
+    return value.toLocaleString('pt-BR');
+};
+function toMonthValue(year, month) { return `${year}-${String(month).padStart(2, '0')}`; }
+function addMonths(date, delta) { const d = new Date(date); d.setMonth(d.getMonth() + delta); return d; }
+function getDefaultRange(mode) {
+    const now = new Date();
+    now.setDate(1);
+    const endYm = toMonthValue(now.getFullYear(), now.getMonth() + 1);
+    if (mode === 'pair') {
+        const startDate = addMonths(now, -1);
+        return { start: toMonthValue(startDate.getFullYear(), startDate.getMonth() + 1), end: endYm };
+    } else {
+        const startDate = addMonths(now, -2);
+        return { start: toMonthValue(startDate.getFullYear(), startDate.getMonth() + 1), end: endYm };
+    }
+}
+function showToast(message, type = 'success', duration = 3000) {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        document.body.appendChild(container);
+    }
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    container.appendChild(toast);
+    setTimeout(() => { toast.remove(); }, duration);
+}
+
+/* ==================================
+  Funções de Acesso a Dados (Firebase)
+ ================================== */
+const loadDataFromStorage = () => appData || {};
+
+async function saveDataToStorage(data) {
+    if (!userId) {
+        showToast('Utilizador não autenticado. Não é possível guardar.', 'danger');
+        return;
+    }
+    // Atualiza o cache local imediatamente para a UI responder
+    appData = data;
+    const dataDocRef = doc(db, 'artifacts', appId, 'users', userId, 'tricomaster_v2_data', 'metrics');
+    try {
+        await setDoc(dataDocRef, data);
+        // O onSnapshot tratará da atualização da UI, então o toast é opcional
+    } catch (error) {
+        console.error("Erro ao guardar dados no Firestore:", error);
+        showToast('Erro ao guardar os dados no servidor.', 'danger');
+    }
+}
+
+
+/* =======================
+    Setup Inicial
+ ======================= */
+document.addEventListener('DOMContentLoaded', async () => {
+    setupNavigation();
+    setupDashboard();
+    setupComparativo('cmp', runComparativo, exportComparativoXLSX);
+    setupComparativo('cmpd', runComparativoDetalhado, exportComparativoDetalhadoXLSX);
+    setupConfigPage();
+    document.getElementById('print-btn').addEventListener('click', () => window.print());
+    
+    // Iniciar sessão
+    await signInUser();
+    
+    showPage('dashboard');
+});
+
+// Autenticação e Listener de Dados
+onAuthStateChanged(auth, user => {
+    if (user) {
+        userId = user.uid;
+        const dataDocRef = doc(db, 'artifacts', appId, 'users', userId, 'tricomaster_v2_data', 'metrics');
+
+        onSnapshot(dataDocRef, (docSnap) => {
+            appData = docSnap.exists() ? docSnap.data() : {};
+            
+            const activePageId = document.querySelector('.page.active')?.id;
+            if (activePageId) {
+                const pageName = activePageId.replace('page-', '');
+                // Re-renderizar páginas de visualização, mas não a de entrada de dados
+                if (pageName === 'dashboard') renderDashboard();
+                else if (pageName === 'comparativo') runComparativo();
+                else if (pageName === 'comparativo-detalhado') runComparativoDetalhado();
+            }
+        });
+    } else {
+        userId = null;
+        appData = {};
+        console.log("Utilizador deslogado.");
+    }
+});
+
+async function signInUser() {
+    try {
+        if (initialAuthToken) {
+            await signInWithCustomToken(auth, initialAuthToken);
+        } else {
+            await signInAnonymously(auth);
+        }
+    } catch (error) {
+        console.error("Falha na autenticação:", error);
+        if (error.code === 'auth/configuration-not-found') {
+            showToast('Erro de configuração: Ative a autenticação anónima na consola do Firebase.', 'danger', 6000);
+        } else {
+            showToast(`Falha na conexão: ${error.message}`, 'danger', 6000);
+        }
+    }
+}
+
+
+function setupNavigation() {
+    document.querySelectorAll('nav li').forEach(li => {
+        li.addEventListener('click', () => showPage(li.dataset.page));
+    });
+}
+
+function showPage(pageId) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById(`page-${pageId}`).classList.add('active');
+    document.querySelectorAll('nav li').forEach(l => l.classList.remove('active'));
+    document.getElementById(`nav-${pageId}`).classList.add('active');
+    const pageTitle = document.querySelector(`#nav-${pageId} a`).textContent;
+    document.getElementById('page-title').textContent = pageTitle;
+    document.getElementById('print-btn').style.display = pageId === 'dashboard' ? 'block' : 'none';
+
+    if (pageId === 'dashboard') renderDashboard();
+    if (pageId === 'comparativo') runComparativo();
+    if (pageId === 'comparativo-detalhado') runComparativoDetalhado();
+    if (pageId === 'config') renderDataEntryForm();
+}
+
+/* ===============================
+  AGREGAÇÃO E CÁLCULO DE MÉTRICAS
+ =============================== */
+function processMonthData(monthId) {
+    const allData = loadDataFromStorage();
+    const monthData = allData[monthId] || {};
+    const inputs = {};
+
+    METRICS_DEFINITIONS.filter(m => m.is_input).forEach(metric => {
+        let total = 0;
+        for (let i = 1; i <= 4; i++) {
+            total += num(monthData[`week${i}`]?.[metric.id]);
+        }
+        inputs[metric.id] = total;
+    });
+
+    const derived = {};
+    derived.leads_totais = inputs.leads_google + inputs.leads_instagram + inputs.leads_outros;
+    derived.consultas_totais = inputs.qtd_primeira + inputs.qtd_nova;
+    const gastoMktTotal = inputs.gasto_google + inputs.gasto_meta;
+    derived.cpl_geral = safeDiv(gastoMktTotal, derived.leads_totais);
+    derived.cpl_google = safeDiv(inputs.gasto_google, inputs.leads_google);
+    derived.cpl_instagram = safeDiv(inputs.gasto_meta, inputs.leads_instagram);
+    derived.cpc_geral = safeDiv(gastoMktTotal, inputs.qtd_primeira);
+    derived.ticket_medio_protocolos_1a = safeDiv(inputs.fat_protocolos_primeira, inputs.protocolos_primeira);
+    derived.ticket_medio_protocolos_nova = safeDiv(inputs.fat_protocolos_nova, inputs.protocolos_nova);
+    derived.pct_prot_sobre_fat_total = safeDiv(inputs.fat_protocolos_primeira + inputs.fat_protocolos_nova, inputs.fat_total) * 100;
+    derived.tx_consulta_protocolo_1a = safeDiv(inputs.protocolos_primeira, inputs.qtd_primeira) * 100;
+    derived.tx_consulta_protocolo_nova = safeDiv(inputs.protocolos_nova, inputs.qtd_nova) * 100;
+    derived.tx_leads_consulta_1a = safeDiv(inputs.qtd_primeira, derived.leads_totais) * 100;
+
+    return { ...inputs, ...derived };
+}
+
+function getRangeMonths(startYm, endYm) {
+    const months = [];
+    let [sy, sm] = startYm.split('-').map(Number);
+    let currentDate = new Date(sy, sm - 1, 1);
+    const endDate = new Date(endYm.split('-')[0], endYm.split('-')[1] - 1, 1);
+    while (currentDate <= endDate) {
+        months.push({ y: currentDate.getFullYear(), m: currentDate.getMonth() + 1 });
+        currentDate.setMonth(currentDate.getMonth() + 1);
+    }
+    return months;
+}
+
+function aggregateRange(startYm, endYm) {
+    const months = getRangeMonths(startYm, endYm);
+    const sum = {};
+    METRICS_DEFINITIONS.filter(m => m.is_input).forEach(m => { sum[m.id] = 0; });
+
+    const allData = loadDataFromStorage();
+    months.forEach(({ y, m }) => {
+        const monthId = toMonthValue(y, m);
+        const monthRawData = allData[monthId] || {};
+        METRICS_DEFINITIONS.filter(m => m.is_input).forEach(metric => {
+            for (let w = 1; w <= 4; w++) {
+                sum[metric.id] += num(monthRawData[`week${w}`]?.[metric.id]);
+            }
+        });
+    });
+
+    const derived = {};
+    derived.leads_totais = sum.leads_google + sum.leads_instagram + sum.leads_outros;
+    derived.consultas_totais = sum.qtd_primeira + sum.qtd_nova;
+    const gastoMktTotal = sum.gasto_google + sum.gasto_meta;
+    derived.cpl_geral = safeDiv(gastoMktTotal, derived.leads_totais);
+    derived.cpl_google = safeDiv(sum.gasto_google, sum.leads_google);
+    derived.cpl_instagram = safeDiv(sum.gasto_meta, sum.leads_instagram);
+    derived.cpc_geral = safeDiv(gastoMktTotal, sum.qtd_primeira);
+    derived.ticket_medio_protocolos_1a = safeDiv(sum.fat_protocolos_primeira, sum.protocolos_primeira);
+    derived.ticket_medio_protocolos_nova = safeDiv(sum.fat_protocolos_nova, sum.protocolos_nova);
+    derived.pct_prot_sobre_fat_total = safeDiv(sum.fat_protocolos_primeira + sum.fat_protocolos_nova, sum.fat_total) * 100;
+    derived.tx_consulta_protocolo_1a = safeDiv(sum.protocolos_primeira, sum.qtd_primeira) * 100;
+    derived.tx_consulta_protocolo_nova = safeDiv(sum.protocolos_nova, sum.qtd_nova) * 100;
+    derived.tx_leads_consulta_1a = safeDiv(sum.qtd_primeira, derived.leads_totais) * 100;
+
+    return { ...sum, ...derived };
+}
+
+/* =======================
+    DASHBOARD v2
+ ======================= */
+function setupDashboard() {
+    const start = document.getElementById('dash-start');
+    const end = document.getElementById('dash-end');
+    const radios = document.getElementsByName('dash-type');
+
+    const updateAndRender = () => {
+        const mode = document.querySelector('input[name="dash-type"]:checked').value;
+        const d = getDefaultRange(mode);
+        start.value = d.start;
+        end.value = d.end;
+        renderDashboard();
+    };
+
+    radios.forEach(r => r.addEventListener('change', updateAndRender));
+    document.getElementById('dash-refresh').addEventListener('click', renderDashboard);
+    start.addEventListener('change', renderDashboard);
+    end.addEventListener('change', renderDashboard);
+
+    updateAndRender();
+}
+
+function renderDashboard() {
+    const startYm = document.getElementById('dash-start').value;
+    const endYm = document.getElementById('dash-end').value;
+    const container = document.getElementById('dashboard-content');
+
+    if (!startYm || !endYm || endYm < startYm) {
+        container.innerHTML = '<div class="card empty">Selecione um período válido.</div>';
+        return;
+    }
+    
+    document.getElementById('print-period').textContent = `Período: ${startYm} a ${endYm}`;
+
+    const data = aggregateRange(startYm, endYm);
+
+    container.innerHTML = `
+        <section class="dashboard-section">
+            <h2>Primeira Consulta</h2>
+            <div class="dashboard-grid">
+                ${createKpiCard('Volume & Receita 1ª Consulta', [
+                    { label: 'Nº 1ª Consultas', value: data.qtd_primeira, type: 'number' },
+                    { label: 'Faturamento 1ª Consulta', value: data.fat_primeira, type: 'currency' },
+                    { label: '% do Faturamento Total', value: safeDiv(data.fat_primeira, data.fat_total) * 100, type: 'percent' },
+                ])}
+                ${createKpiCard('Conversão & Custo 1ª Consulta', [
+                    { label: 'Leads → 1ª Consulta', value: data.tx_leads_consulta_1a, type: 'percent' },
+                    { label: 'CPC 1ª Consulta', value: data.cpc_geral, type: 'currency' },
+                    { label: 'Protocolos 1ª', value: data.protocolos_primeira, type: 'number' },
+                    { label: 'Ticket Médio Prot. 1ª', value: data.ticket_medio_protocolos_1a, type: 'currency' },
+                ])}
+                ${createKpiCard('Protocolos na 1ª (Impacto)', [
+                    { label: 'Faturamento Protocolos 1ª', value: data.fat_protocolos_primeira, type: 'currency' },
+                    { label: '% Prot. 1ª / Fat. Total', value: safeDiv(data.fat_protocolos_primeira, data.fat_total) * 100, type: 'percent' },
+                    { label: 'Tx. Consulta → Protocolo 1ª', value: data.tx_consulta_protocolo_1a, type: 'percent' },
+                ])}
+            </div>
+        </section>
+        <section class="dashboard-section">
+            <h2>Nova Consulta</h2>
+            <div class="dashboard-grid">
+                 ${createKpiCard('Volume & Receita Nova Consulta', [
+                    { label: 'Nº Novas Consultas', value: data.qtd_nova, type: 'number' },
+                    { label: 'Faturamento Nova Consulta', value: data.fat_nova, type: 'currency' },
+                    { label: '% do Faturamento Total', value: safeDiv(data.fat_nova, data.fat_total) * 100, type: 'percent' },
+                ])}
+                 ${createKpiCard('Performance Nova Consulta', [
+                    { label: 'Protocolos Nova', value: data.protocolos_nova, type: 'number' },
+                    { label: 'Ticket Médio Prot. Nova', value: data.ticket_medio_protocolos_nova, type: 'currency' },
+                    { label: 'Tx. Consulta → Protocolo Nova', value: data.tx_consulta_protocolo_nova, type: 'percent' },
+                ])}
+                ${createKpiCard('Protocolos na Nova (Impacto)', [
+                    { label: 'Faturamento Protocolos Nova', value: data.fat_protocolos_nova, type: 'currency' },
+                    { label: '% Prot. Nova / Fat. Total', value: safeDiv(data.fat_protocolos_nova, data.fat_total) * 100, type: 'percent' },
+                ])}
+            </div>
+        </section>
+         <section class="dashboard-section">
+            <h2>Captação & Custo</h2>
+            <div class="dashboard-grid">
+                ${createKpiCard('Leads por Canal', [
+                    { label: 'Leads Google', value: data.leads_google, type: 'number', sub: `${formatValue(safeDiv(data.leads_google, data.leads_totais) * 100, 'percent')}` },
+                    { label: 'Leads Instagram', value: data.leads_instagram, type: 'number', sub: `${formatValue(safeDiv(data.leads_instagram, data.leads_totais) * 100, 'percent')}` },
+                    { label: 'Leads Outros', value: data.leads_outros, type: 'number', sub: `${formatValue(safeDiv(data.leads_outros, data.leads_totais) * 100, 'percent')}` },
+                    { label: 'Total de Leads', value: data.leads_totais, type: 'number' },
+                ])}
+                ${createKpiCard('Gastos & CPL/CPC', [
+                    { label: 'Gasto Marketing Total', value: data.gasto_google + data.gasto_meta, type: 'currency' },
+                    { label: 'Gasto Agência', value: data.gasto_agencia, type: 'currency' },
+                    { label: 'CPL Geral', value: data.cpl_geral, type: 'currency' },
+                    { label: 'CPC Geral (1ª consulta)', value: data.cpc_geral, type: 'currency' },
+                ])}
+            </div>
+        </section>
+        <section class="dashboard-section">
+            <h2>Gráficos de Tendência</h2>
+            <div class="chart-grid">
+                <div class="card"><h3>Faturamento por Mês</h3><canvas id="faturamentoChart"></canvas></div>
+                <div class="card"><h3>CPL vs CPC por Mês</h3><canvas id="custosChart"></canvas></div>
+                <div class="card"><h3>Protocolos (1ª vs Nova)</h3><canvas id="protocolosChart"></canvas></div>
+                <div class="card"><h3>Composição do Faturamento</h3><div class="chart-container"><canvas id="composicaoChart"></canvas></div></div>
+            </div>
+        </section>
+    `;
+    renderDashboardCharts(startYm, endYm, data);
+}
+
+function createKpiCard(title, items) {
+    const itemsHtml = items.map(item => `
+        <div class="kpi-item">
+            <span class="kpi-label">${item.label}</span>
+            <div>
+                <span class="kpi-value">${formatValue(item.value, item.type)}</span>
+                ${item.sub ? `<span class="kpi-value small" style="color:var(--text-medium-gray); margin-left: 8px;">(${item.sub})</span>` : ''}
+            </div>
+        </div>
+    `).join('');
+    return `<div class="card"><div class="kpi-card"><h3>${title}</h3>${itemsHtml}</div></div>`;
+}
+
+function renderDashboardCharts(startYm, endYm, totalData) {
+    const months = getRangeMonths(startYm, endYm);
+    const labels = months.map(({ y, m }) => `${MONTHS[m - 1].substring(0, 3)}/${String(y).slice(2)}`);
+    const monthlyData = months.map(({y, m}) => processMonthData(toMonthValue(y, m)));
+
+    const chartData = {
+        faturamento: monthlyData.map(d => d.fat_total),
+        cpl: monthlyData.map(d => d.cpl_geral),
+        cpc: monthlyData.map(d => d.cpc_geral),
+        protocolos1a: monthlyData.map(d => d.protocolos_primeira),
+        protocolosNova: monthlyData.map(d => d.protocolos_nova),
+    };
+
+    // Chart 1: Faturamento
+    if (chartInstances.faturamento) chartInstances.faturamento.destroy();
+    chartInstances.faturamento = new Chart(document.getElementById('faturamentoChart').getContext('2d'), {
+        type: 'line',
+        data: { labels, datasets: [{ label: 'Faturamento Total', data: chartData.faturamento, borderColor: 'var(--primary-green)', backgroundColor: 'rgba(1, 52, 37, 0.1)', fill: true, tension: 0.3 }] }
+    });
+
+    // Chart 2: Custos
+    if (chartInstances.custos) chartInstances.custos.destroy();
+    chartInstances.custos = new Chart(document.getElementById('custosChart').getContext('2d'), {
+        type: 'bar',
+        data: { labels, datasets: [
+            { label: 'CPL Geral', data: chartData.cpl, backgroundColor: 'var(--primary-green)' }, 
+            { label: 'CPC 1ª Consulta', data: chartData.cpc, backgroundColor: 'var(--accent-gold)' }
+        ]},
+        options: { scales: { y: { beginAtZero: true } } }
+    });
+    
+    // Chart 3: Protocolos
+    if (chartInstances.protocolos) chartInstances.protocolos.destroy();
+    chartInstances.protocolos = new Chart(document.getElementById('protocolosChart').getContext('2d'), {
+        type: 'bar',
+        data: { labels, datasets: [
+            { label: 'Protocolos 1ª Consulta', data: chartData.protocolos1a, backgroundColor: 'var(--primary-green)' }, 
+            { label: 'Protocolos Nova Consulta', data: chartData.protocolosNova, backgroundColor: 'var(--accent-gold)' }
+        ]},
+        options: { scales: { y: { beginAtZero: true, stacked: true }, x: { stacked: true } } }
+    });
+
+    // Chart 4: Composição do Faturamento
+    if (chartInstances.composicao) chartInstances.composicao.destroy();
+    chartInstances.composicao = new Chart(document.getElementById('composicaoChart').getContext('2d'), {
+        type: 'doughnut',
+        data: {
+            labels: ['Fat. 1ª Consulta', 'Fat. Nova Consulta', 'Prot. 1ª Consulta', 'Prot. Nova Consulta'],
+            datasets: [{
+                label: 'Composição do Faturamento',
+                data: [totalData.fat_primeira, totalData.fat_nova, totalData.fat_protocolos_primeira, totalData.fat_protocolos_nova],
+                backgroundColor: ['#013425', '#065f46', '#c5a365', '#fde047'],
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: false }
+    });
+}
+
+
+/* =====================================
+  PÁGINAS DE COMPARATIVO (ATUALIZADAS)
+ ===================================== */
+function setupComparativo(prefix, runFn, exportFn) {
+    const start = document.getElementById(`${prefix}-start`);
+    const end = document.getElementById(`${prefix}-end`);
+    const radios = document.getElementsByName(`${prefix}-type`);
+    const exportBtn = document.getElementById(`${prefix}-export`);
+    
+    const def = getDefaultRange('pair');
+    start.value = def.start;
+    end.value = def.end;
+    
+    const updateAndRun = () => {
+        const mode = document.querySelector(`input[name="${prefix}-type"]:checked`).value;
+        const d = getDefaultRange(mode);
+        start.value = d.start;
+        end.value = d.end;
+        runFn();
+    };
+
+    radios.forEach(r => r.addEventListener('change', updateAndRun));
+    start.addEventListener('change', runFn);
+    end.addEventListener('change', runFn);
+    if(exportBtn && exportFn) exportBtn.addEventListener('click', exportFn);
+}
+
+function runComparativo() {
+    const startYm = document.getElementById('cmp-start').value;
+    const endYm = document.getElementById('cmp-end').value;
+    const resultDiv = document.getElementById('cmp-result');
+    if (!startYm || !endYm || endYm < startYm) {
+        resultDiv.innerHTML = '<div class="card empty">Período inválido.</div>';
+        return;
+    }
+    const mode = document.querySelector('input[name="cmp-type"]:checked').value;
+    
+    let months = [];
+    if (mode === 'pair') {
+        const [yA, mA] = startYm.split('-');
+        const [yB, mB] = endYm.split('-');
+        months = [{y: +yA, m: +mA}, {y: +yB, m: +mB}];
+    } else {
+        months = getRangeMonths(startYm, endYm);
+    }
+    
+    const monthlyData = months.map(({y, m}) => ({
+        label: `${MONTHS[m-1]}/${y}`,
+        data: processMonthData(toMonthValue(y, m))
+    }));
+
+    let html = `<div class="card"><div class="table-wrapper"><table class="comparison-table"><thead><tr><th class="sticky-col">Métrica</th>`;
+    monthlyData.forEach(md => { html += `<th>${md.label}</th>`; });
+    html += '<th>Total</th><th>Média</th></tr></thead><tbody>';
+
+    Object.values(METRIC_GROUPS).forEach(groupName => {
+        const metricsInGroup = METRICS_DEFINITIONS.filter(m => m.group === groupName);
+        if(metricsInGroup.length === 0) return;
+
+        html += `<tr class="group-header"><th colspan="${3 + months.length}">${groupName}</th></tr>`;
+        
+        metricsInGroup.forEach(metric => {
+            html += `<tr><td class="sticky-col">${metric.label}</td>`;
+            const values = [];
+            monthlyData.forEach(md => {
+                const value = md.data[metric.id];
+                values.push(value);
+                html += `<td>${formatValue(value, metric.type)}</td>`;
+            });
+
+            const numericValues = values.filter(v => typeof v === 'number' && isFinite(v));
+            const sum = numericValues.reduce((a, b) => a + b, 0);
+            
+            let avg = safeDiv(sum, numericValues.length);
+            if (metric.type === 'percent') {
+                const nonZeroValues = numericValues.filter(v => v !== 0);
+                avg = safeDiv(nonZeroValues.reduce((a,b)=>a+b, 0), nonZeroValues.length);
+            }
+            
+            html += `<td style="font-weight:700">${formatValue(sum, metric.type)}</td>`;
+            html += `<td style="font-weight:700">${formatValue(avg, metric.type)}</td>`;
+            html += '</tr>';
+        });
+    });
+
+    html += '</tbody></table></div></div>';
+    resultDiv.innerHTML = html;
+}
+
+function runComparativoDetalhado() { 
+    const startYm = document.getElementById('cmpd-start').value;
+    const endYm = document.getElementById('cmpd-end').value;
+    const resultDiv = document.getElementById('cmpd-result');
+
+    if (!startYm || !endYm || endYm < startYm) {
+        resultDiv.innerHTML = '<div class="card empty">Período inválido.</div>';
+        return;
+    }
+
+    const mode = document.querySelector('input[name="cmpd-type"]:checked').value;
+    let months = [];
+    if (mode === 'pair') {
+        const [yA, mA] = startYm.split('-');
+        const [yB, mB] = endYm.split('-');
+        months = [{y: +yA, m: +mA}, {y: +yB, m: +mB}];
+    } else {
+        months = getRangeMonths(startYm, endYm);
+    }
+    
+    const allData = loadDataFromStorage();
+
+    let html = `<div class="card"><div class="table-wrapper"><table class="comparison-table">`;
+    html += `<thead><tr><th class="sticky-col" rowspan="2">Métrica</th>`;
+    months.forEach(({y, m}, idx) => {
+        const altClass = idx % 2 !== 0 ? 'month-alt' : '';
+        html += `<th colspan="5" style="text-align:center" class="${altClass}">${MONTHS[m-1]}/${y}</th>`;
+    });
+    html += `</tr><tr>`;
+    months.forEach((_, idx) => {
+        const altClass = idx % 2 !== 0 ? 'month-alt' : '';
+        html += `<th class="${altClass}">Sem. 1</th><th class="${altClass}">Sem. 2</th><th class="${altClass}">Sem. 3</th><th class="${altClass}">Sem. 4</th><th style="font-weight:800" class="${altClass}">Total Mês</th>`;
+    });
+    html += `</tr></thead><tbody>`;
+
+    Object.values(METRIC_GROUPS).forEach(groupName => {
+        const inputMetricsInGroup = METRICS_DEFINITIONS.filter(m => m.group === groupName && m.is_input);
+        if (inputMetricsInGroup.length === 0) return;
+        
+        html += `<tr class="group-header"><th colspan="${1 + months.length * 5}">${groupName}</th></tr>`;
+
+        inputMetricsInGroup.forEach(metric => {
+            html += `<tr><td class="sticky-col">${metric.label}</td>`;
+            months.forEach(({y, m}, idx) => {
+                const altClass = idx % 2 !== 0 ? 'month-alt' : '';
+                const monthId = toMonthValue(y, m);
+                const monthRawData = allData[monthId] || {};
+                let monthTotal = 0;
+                for (let w = 1; w <= 4; w++) {
+                    const value = num(monthRawData[`week${w}`]?.[metric.id]);
+                    monthTotal += value;
+                    html += `<td class="${altClass}">${formatValue(value, metric.type)}</td>`;
+                }
+                html += `<td style="font-weight:700" class="${altClass}">${formatValue(monthTotal, metric.type)}</td>`;
+            });
+            html += `</tr>`;
+        });
+    });
+
+    html += `</tbody></table></div></div>`;
+    resultDiv.innerHTML = html;
+}
+
+function exportComparativoXLSX() {
+    const startYm = document.getElementById('cmp-start').value;
+    const endYm = document.getElementById('cmp-end').value;
+    if (!startYm || !endYm || endYm < startYm) {
+        showToast('Período inválido para exportação.', 'warning');
+        return;
+    }
+    const mode = document.querySelector('input[name="cmp-type"]:checked').value;
+    
+    let months = [];
+    if (mode === 'pair') {
+        const [yA, mA] = startYm.split('-');
+        const [yB, mB] = endYm.split('-');
+        months = [{y: +yA, m: +mA}, {y: +yB, m: +mB}];
+    } else {
+        months = getRangeMonths(startYm, endYm);
+    }
+    
+    const monthlyData = months.map(({y, m}) => ({
+        label: `${MONTHS[m-1]}/${y}`,
+        data: processMonthData(toMonthValue(y, m))
+    }));
+    
+    const aoa = [];
+    const header = ['Métrica', ...monthlyData.map(md => md.label), 'Total', 'Média'];
+    aoa.push(header);
+
+    Object.values(METRIC_GROUPS).forEach(groupName => {
+        const metricsInGroup = METRICS_DEFINITIONS.filter(m => m.group === groupName);
+        if(metricsInGroup.length === 0) return;
+        aoa.push([groupName]); // Group header
+
+        metricsInGroup.forEach(metric => {
+            const row = [metric.label];
+            const values = monthlyData.map(md => formatValue(md.data[metric.id], metric.type, true));
+            row.push(...values);
+
+            const numericValues = values.filter(v => typeof v === 'number' && isFinite(v));
+            const sum = numericValues.reduce((a, b) => a + b, 0);
+            
+            let avg = safeDiv(sum, numericValues.length);
+            if (metric.type === 'percent') {
+                const nonZeroValues = numericValues.filter(v => v !== 0);
+                avg = safeDiv(nonZeroValues.reduce((a,b)=>a+b, 0), nonZeroValues.length);
+            }
+            
+            row.push(formatValue(sum, metric.type, true), formatValue(avg, metric.type, true));
+            aoa.push(row);
+        });
+    });
+    
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    XLSX.utils.book_append_sheet(wb, ws, "Comparativo");
+    XLSX.writeFile(wb, `Tricomaster_Comparativo_${startYm}_a_${endYm}.xlsx`);
+}
+
+function exportComparativoDetalhadoXLSX() {
+    const startYm = document.getElementById('cmpd-start').value;
+    const endYm = document.getElementById('cmpd-end').value;
+    if (!startYm || !endYm || endYm < startYm) {
+        showToast('Período inválido para exportação.', 'warning');
+        return;
+    }
+    const mode = document.querySelector('input[name="cmpd-type"]:checked').value;
+    
+    let months = [];
+    if (mode === 'pair') {
+        const [yA, mA] = startYm.split('-');
+        const [yB, mB] = endYm.split('-');
+        months = [{y: +yA, m: +mA}, {y: +yB, m: +mB}];
+    } else {
+        months = getRangeMonths(startYm, endYm);
+    }
+    
+    const allData = loadDataFromStorage();
+    const wb = XLSX.utils.book_new();
+
+    // Sheets for each month
+    months.forEach(({y, m}) => {
+        const monthId = toMonthValue(y, m);
+        const monthSheetName = `${y}-${String(m).padStart(2,'0')}`;
+        const aoaMonth = [];
+        const headerMonth = ['Métrica', 'Semana 1', 'Semana 2', 'Semana 3', 'Semana 4', 'Total Mês'];
+        aoaMonth.push(headerMonth);
+
+        Object.values(METRIC_GROUPS).forEach(groupName => {
+            const inputMetricsInGroup = METRICS_DEFINITIONS.filter(m => m.group === groupName && m.is_input);
+            if (inputMetricsInGroup.length === 0) return;
+            aoaMonth.push([groupName]);
+
+            inputMetricsInGroup.forEach(metric => {
+                const row = [metric.label];
+                let monthTotal = 0;
+                for (let w = 1; w <= 4; w++) {
+                    const value = num(allData[monthId]?.[`week${w}`]?.[metric.id]);
+                    row.push(value);
+                    monthTotal += value;
+                }
+                row.push(monthTotal);
+                aoaMonth.push(row);
+            });
+        });
+        const wsMonth = XLSX.utils.aoa_to_sheet(aoaMonth);
+        XLSX.utils.book_append_sheet(wb, wsMonth, monthSheetName);
+    });
+
+    // Summary Sheet
+    const monthlyData = months.map(({y, m}) => ({
+        label: `${MONTHS[m-1]}/${y}`,
+        data: processMonthData(toMonthValue(y, m))
+    }));
+    const aoaSummary = [];
+    const headerSummary = ['Métrica', ...monthlyData.map(md => md.label), 'Total', 'Média'];
+    aoaSummary.push(headerSummary);
+    Object.values(METRIC_GROUPS).forEach(groupName => {
+        const metricsInGroup = METRICS_DEFINITIONS.filter(m => m.group === groupName);
+        if (metricsInGroup.length === 0) return;
+        aoaSummary.push([groupName]);
+        metricsInGroup.forEach(metric => {
+             const row = [metric.label];
+            const values = monthlyData.map(md => formatValue(md.data[metric.id], metric.type, true));
+            row.push(...values);
+            const numericValues = values.filter(v => typeof v === 'number' && isFinite(v));
+            const sum = numericValues.reduce((a, b) => a + b, 0);
+            let avg = safeDiv(sum, numericValues.length);
+            if (metric.type === 'percent') {
+                const nonZeroValues = numericValues.filter(v => v !== 0);
+                avg = safeDiv(nonZeroValues.reduce((a,b)=>a+b, 0), nonZeroValues.length);
+            }
+            row.push(formatValue(sum, metric.type, true), formatValue(avg, metric.type, true));
+            aoaSummary.push(row);
+        });
+    });
+    const wsSummary = XLSX.utils.aoa_to_sheet(aoaSummary);
+    XLSX.utils.book_append_sheet(wb, wsSummary, 'Resumo Geral');
+
+    XLSX.writeFile(wb, `Tricomaster_Detalhado_${startYm}_a_${endYm}.xlsx`);
+}
+
+
+/* =======================
+  PÁGINA DE LANÇAR DADOS (v2)
+ ======================= */
+function setupConfigPage() {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const years = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
+    const mSel = document.getElementById('form-month');
+    const ySel = document.getElementById('form-year');
+    mSel.innerHTML = ''; MONTHS.forEach((m, i) => mSel.add(new Option(m, i + 1)));
+    ySel.innerHTML = ''; years.forEach(y => ySel.add(new Option(y, y)));
+    mSel.value = now.getMonth() + 1;
+    ySel.value = currentYear;
+
+    mSel.addEventListener('change', renderDataEntryForm);
+    ySel.addEventListener('change', renderDataEntryForm);
+
+    document.getElementById('save-month-btn').addEventListener('click', saveMatrix);
+    document.getElementById('clear-month-btn').addEventListener('click', clearCurrentMonth);
+    document.getElementById('export-json-btn').addEventListener('click', exportAllData);
+    document.getElementById('import-json-btn').addEventListener('click', () => document.getElementById('json-file-input').click());
+    document.getElementById('json-file-input').addEventListener('change', importAllData);
+}
+
+function renderDataEntryForm() {
+    const tabsContainer = document.getElementById('form-tabs');
+    const contentsContainer = document.getElementById('form-tab-contents');
+    tabsContainer.innerHTML = '';
+    contentsContainer.innerHTML = '';
+
+    Object.values(METRIC_GROUPS).forEach((groupName, index) => {
+        const metricsInGroup = METRICS_DEFINITIONS.filter(m => m.is_input && m.group === groupName);
+        if (metricsInGroup.length === 0) return;
+
+        const tabBtn = document.createElement('button');
+        tabBtn.className = 'tab-btn' + (index === 0 ? ' active' : '');
+        tabBtn.textContent = groupName;
+        tabBtn.dataset.tab = `tab-${index}`;
+        tabBtn.addEventListener('click', () => {
+            document.querySelectorAll('.tab-btn, .tab-content').forEach(el => el.classList.remove('active'));
+            tabBtn.classList.add('active');
+            document.getElementById(`tab-${index}`).classList.add('active');
+        });
+        tabsContainer.appendChild(tabBtn);
+
+        const tabContent = document.createElement('div');
+        tabContent.className = 'tab-content' + (index === 0 ? ' active' : '');
+        tabContent.id = `tab-${index}`;
+
+        let tableHtml = `
+            <div class="table-wrapper">
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th class="sticky-col">MÉTRICA</th>
+                            <th>Semana 1</th><th>Semana 2</th><th>Semana 3</th><th>Semana 4</th>
+                            <th style="font-weight:800">TOTAL MENSAL</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+        
+        metricsInGroup.forEach(metric => {
+            tableHtml += `
+                <tr>
+                    <td class="sticky-col">${metric.label}</td>
+                    ${[1, 2, 3, 4].map(w => `
+                        <td>
+                            <input type="number" 
+                                   step="${metric.type === 'currency' ? '0.01' : '1'}"
+                                   min="0"
+                                   id="form-${metric.id}-week${w}" 
+                                   style="width:160px"
+                                   oninput="updateRowTotal('${metric.id}', '${metric.type}')">
+                        </td>
+                    `).join('')}
+                    <td id="total-${metric.id}" style="font-weight:700"></td>
+                </tr>`;
+        });
+        
+        tableHtml += '</tbody></table></div>';
+        tabContent.innerHTML = tableHtml;
+        contentsContainer.appendChild(tabContent);
+    });
+    loadMatrixValues();
+}
+
+window.updateRowTotal = function(metricId, metricType) {
+    let sum = 0;
+    for (let w = 1; w <= 4; w++) {
+        const input = document.getElementById(`form-${metric.id}-week${w}`);
+        sum += num(input.value);
+    }
+    document.getElementById(`total-${metricId}`).textContent = formatValue(sum, metricType);
+};
+
+function loadMatrixValues() {
+    const year = document.getElementById('form-year').value;
+    const month = String(document.getElementById('form-month').value).padStart(2, '0');
+    const monthId = `${year}-${month}`;
+    const allData = loadDataFromStorage();
+    const monthData = allData[monthId] || {};
+
+    METRICS_DEFINITIONS.filter(m => m.is_input).forEach(metric => {
+        for (let w = 1; w <= 4; w++) {
+            const input = document.getElementById(`form-${metric.id}-week${w}`);
+            if (input) {
+                input.value = monthData[`week${w}`]?.[metric.id] || '';
+            }
+        }
+        updateRowTotal(metric.id, metric.type);
+    });
+}
+
+async function saveMatrix() {
+    const year = document.getElementById('form-year').value;
+    const month = String(document.getElementById('form-month').value).padStart(2, '0');
+    const monthId = `${year}-${month}`;
+    const allData = loadDataFromStorage();
+    if (!allData[monthId]) allData[monthId] = {};
+
+    for (let w = 1; w <= 4; w++) {
+        if (!allData[monthId][`week${w}`]) allData[monthId][`week${w}`] = {};
+        METRICS_DEFINITIONS.filter(m => m.is_input).forEach(metric => {
+            const input = document.getElementById(`form-${metric.id}-week${w}`);
+            allData[monthId][`week${w}`][metric.id] = num(input.value);
+            
+            if (metric.id === 'gasto_google' && num(input.value) > 0 && num(document.getElementById('form-leads_google-week' + w).value) === 0) {
+                showToast(`Atenção (Sem. ${w}): Gasto no Google sem leads registados.`, 'warning');
+            }
+            if (metric.id === 'protocolos_primeira' && num(input.value) > 0 && num(document.getElementById('form-qtd_primeira-week' + w).value) === 0) {
+                showToast(`Atenção (Sem. ${w}): Protocolos registados sem nenhuma 1ª consulta.`, 'danger');
+            }
+        });
+    }
+    await saveDataToStorage(allData);
+    showToast('Dados do mês guardados com sucesso!');
+}
+
+async function clearCurrentMonth() {
+    const year = document.getElementById('form-year').value;
+    const month = String(document.getElementById('form-month').value).padStart(2, '0');
+    const monthId = `${year}-${month}`;
+    if (!confirm(`Apagar TODOS os dados de ${MONTHS[+month - 1]}/${year}?`)) return;
+    const allData = loadDataFromStorage();
+    if (allData[monthId]) delete allData[monthId];
+    await saveDataToStorage(allData);
+    loadMatrixValues();
+    showToast('Dados do mês limpos com sucesso.', 'success');
+}
+
+function exportAllData() {
+    const allData = loadDataFromStorage();
+    if (Object.keys(allData).length === 0) {
+        showToast('Não há dados para exportar.', 'warning'); return;
+    }
+    const dataStr = JSON.stringify(allData, null, 2);
+    const blob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const date = new Date().toISOString().split('T')[0];
+    a.href = url;
+    a.download = `tricomaster_backup_v2_${date}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('Backup exportado com sucesso!');
+}
+
+async function importAllData(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    if (!confirm('Isto irá sobrescrever TODOS os dados existentes. Deseja continuar?')) {
+        event.target.value = ''; return;
+    }
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        try {
+            const data = JSON.parse(e.target.result);
+            await saveDataToStorage(data);
+            showToast('Dados importados com sucesso!');
+            renderDataEntryForm(); // Recarrega os dados na tela
+        } catch (error) {
+            showToast('Erro ao ler o ficheiro. É um JSON válido?', 'danger');
+        } finally {
+            event.target.value = '';
+        }
+    };
+    reader.readAsText(file);
+}
+
+</script>
+</body>
+</html>
+
