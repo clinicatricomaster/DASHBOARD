@@ -344,12 +344,12 @@ async function saveDataToStorage(data) {
         showToast('Utilizador não autenticado. Não é possível guardar.', 'danger');
         return;
     }
-    // Atualiza o cache local imediatamente para a UI responder
-    appData = data;
+    
+    const dataToSave = JSON.parse(JSON.stringify(data));
+
     const dataDocRef = doc(db, 'artifacts', appId, 'users', userId, 'tricomaster_v2_data', 'metrics');
     try {
-        await setDoc(dataDocRef, data);
-        // O onSnapshot tratará da atualização da UI, então o toast é opcional
+        await setDoc(dataDocRef, dataToSave);
     } catch (error) {
         console.error("Erro ao guardar dados no Firestore:", error);
         showToast('Erro ao guardar os dados no servidor.', 'danger');
@@ -368,7 +368,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupConfigPage();
     document.getElementById('print-btn').addEventListener('click', () => window.print());
     
-    // Iniciar sessão
     await signInUser();
     
     showPage('dashboard');
@@ -386,7 +385,6 @@ onAuthStateChanged(auth, user => {
             const activePageId = document.querySelector('.page.active')?.id;
             if (activePageId) {
                 const pageName = activePageId.replace('page-', '');
-                // Re-renderizar páginas de visualização, mas não a de entrada de dados
                 if (pageName === 'dashboard') renderDashboard();
                 else if (pageName === 'comparativo') runComparativo();
                 else if (pageName === 'comparativo-detalhado') runComparativoDetalhado();
@@ -408,7 +406,7 @@ async function signInUser() {
         }
     } catch (error) {
         console.error("Falha na autenticação:", error);
-        if (error.code === 'auth/configuration-not-found') {
+        if (error.code === 'auth/configuration-not-found' || error.code === 'auth/admin-restricted-operation') {
             showToast('Erro de configuração: Ative a autenticação anónima na consola do Firebase.', 'danger', 6000);
         } else {
             showToast(`Falha na conexão: ${error.message}`, 'danger', 6000);
@@ -736,51 +734,90 @@ function runComparativo() {
     }
     const mode = document.querySelector('input[name="cmp-type"]:checked').value;
     
-    let months = [];
-    if (mode === 'pair') {
-        const [yA, mA] = startYm.split('-');
-        const [yB, mB] = endYm.split('-');
-        months = [{y: +yA, m: +mA}, {y: +yB, m: +mB}];
-    } else {
-        months = getRangeMonths(startYm, endYm);
-    }
-    
-    const monthlyData = months.map(({y, m}) => ({
-        label: `${MONTHS[m-1]}/${y}`,
-        data: processMonthData(toMonthValue(y, m))
-    }));
+    // --- LÓGICA MODO ARCO ---
+    if (mode === 'arc') {
+        const months = getRangeMonths(startYm, endYm);
+        const monthlyData = months.map(({y, m}) => ({
+            label: `${MONTHS[m-1]}/${y}`,
+            data: processMonthData(toMonthValue(y, m))
+        }));
 
-    let html = `<div class="card"><div class="table-wrapper"><table class="comparison-table"><thead><tr><th class="sticky-col">Métrica</th>`;
-    monthlyData.forEach(md => { html += `<th>${md.label}</th>`; });
-    html += '<th>Total</th><th>Média</th></tr></thead><tbody>';
+        let html = `<div class="card"><div class="table-wrapper"><table class="comparison-table"><thead><tr><th class="sticky-col">Métrica</th>`;
+        monthlyData.forEach(md => { html += `<th>${md.label}</th>`; });
+        html += '<th>Total</th><th>Média</th></tr></thead><tbody>';
+
+        Object.values(METRIC_GROUPS).forEach(groupName => {
+            const metricsInGroup = METRICS_DEFINITIONS.filter(m => m.group === groupName);
+            if(metricsInGroup.length === 0) return;
+
+            html += `<tr class="group-header"><th colspan="${3 + months.length}">${groupName}</th></tr>`;
+            
+            metricsInGroup.forEach(metric => {
+                html += `<tr><td class="sticky-col">${metric.label}</td>`;
+                const values = [];
+                monthlyData.forEach(md => {
+                    const value = md.data[metric.id];
+                    values.push(value);
+                    html += `<td>${formatValue(value, metric.type)}</td>`;
+                });
+
+                const numericValues = values.filter(v => typeof v === 'number' && isFinite(v));
+                const sum = numericValues.reduce((a, b) => a + b, 0);
+                let avg = safeDiv(sum, numericValues.length);
+                if (metric.type === 'percent') {
+                    const nonZeroValues = numericValues.filter(v => v !== 0);
+                    avg = safeDiv(nonZeroValues.reduce((a,b)=>a+b, 0), nonZeroValues.length);
+                }
+                
+                html += `<td style="font-weight:700">${formatValue(sum, metric.type)}</td>`;
+                html += `<td style="font-weight:700">${formatValue(avg, metric.type)}</td>`;
+                html += '</tr>';
+            });
+        });
+        html += '</tbody></table></div></div>';
+        resultDiv.innerHTML = html;
+        return;
+    }
+
+    // --- LÓGICA MODO DOIS MESES (PAIR) ---
+    const [yA, mA] = startYm.split('-');
+    const [yB, mB] = endYm.split('-');
+    const dataA = processMonthData(toMonthValue(yA, mA));
+    const dataB = processMonthData(toMonthValue(yB, mB));
+
+    let html = `<div class="card"><div class="table-wrapper"><table class="comparison-table"><thead><tr><th class="sticky-col">Métrica</th><th>${MONTHS[mA-1]}/${yA}</th><th>${MONTHS[mB-1]}/${yB}</th><th>Variação %</th></tr></thead><tbody>`;
 
     Object.values(METRIC_GROUPS).forEach(groupName => {
         const metricsInGroup = METRICS_DEFINITIONS.filter(m => m.group === groupName);
         if(metricsInGroup.length === 0) return;
 
-        html += `<tr class="group-header"><th colspan="${3 + months.length}">${groupName}</th></tr>`;
+        html += `<tr class="group-header"><th colspan="4">${groupName}</th></tr>`;
         
         metricsInGroup.forEach(metric => {
-            html += `<tr><td class="sticky-col">${metric.label}</td>`;
-            const values = [];
-            monthlyData.forEach(md => {
-                const value = md.data[metric.id];
-                values.push(value);
-                html += `<td>${formatValue(value, metric.type)}</td>`;
-            });
+            const valA = num(dataA[metric.id]);
+            const valB = num(dataB[metric.id]);
+            let variationCell = '—';
 
-            const numericValues = values.filter(v => typeof v === 'number' && isFinite(v));
-            const sum = numericValues.reduce((a, b) => a + b, 0);
-            
-            let avg = safeDiv(sum, numericValues.length);
-            if (metric.type === 'percent') {
-                const nonZeroValues = numericValues.filter(v => v !== 0);
-                avg = safeDiv(nonZeroValues.reduce((a,b)=>a+b, 0), nonZeroValues.length);
+            if (valA === 0 && valB > 0) {
+                variationCell = `<span style="color:var(--success)">Novo</span>`;
+            } else if (valA > 0 && valB === 0) {
+                 variationCell = `<span style="color:var(--danger)">-100.0%</span>`;
+            } else if (valA !== 0) {
+                const pctChange = ((valB - valA) / valA) * 100;
+                const color = pctChange >= 0 ? 'var(--success)' : 'var(--danger)';
+                const sign = pctChange > 0 ? '+' : '';
+                variationCell = `<span style="color:${color}">${sign}${pctChange.toFixed(1)}%</span>`;
+            } else if (valA === 0 && valB === 0) {
+                variationCell = `0.0%`;
             }
-            
-            html += `<td style="font-weight:700">${formatValue(sum, metric.type)}</td>`;
-            html += `<td style="font-weight:700">${formatValue(avg, metric.type)}</td>`;
-            html += '</tr>';
+
+            html += `
+                <tr>
+                    <td class="sticky-col">${metric.label}</td>
+                    <td>${formatValue(valA, metric.type)}</td>
+                    <td>${formatValue(valB, metric.type)}</td>
+                    <td style="font-weight:700">${variationCell}</td>
+                </tr>`;
         });
     });
 
@@ -1026,6 +1063,7 @@ function renderDataEntryForm() {
         const metricsInGroup = METRICS_DEFINITIONS.filter(m => m.is_input && m.group === groupName);
         if (metricsInGroup.length === 0) return;
 
+        // ... (criação dos tabs) ...
         const tabBtn = document.createElement('button');
         tabBtn.className = 'tab-btn' + (index === 0 ? ' active' : '');
         tabBtn.textContent = groupName;
@@ -1063,8 +1101,7 @@ function renderDataEntryForm() {
                                    step="${metric.type === 'currency' ? '0.01' : '1'}"
                                    min="0"
                                    id="form-${metric.id}-week${w}" 
-                                   style="width:160px"
-                                   oninput="updateRowTotal('${metric.id}', '${metric.type}')">
+                                   style="width:160px">
                         </td>
                     `).join('')}
                     <td id="total-${metric.id}" style="font-weight:700"></td>
@@ -1074,17 +1111,28 @@ function renderDataEntryForm() {
         tableHtml += '</tbody></table></div>';
         tabContent.innerHTML = tableHtml;
         contentsContainer.appendChild(tabContent);
+        
+        // CORREÇÃO: Adicionar event listeners programaticamente
+        metricsInGroup.forEach(metric => {
+            for (let w = 1; w <= 4; w++) {
+                const input = document.getElementById(`form-${metric.id}-week${w}`);
+                if (input) {
+                    input.addEventListener('input', () => updateRowTotal(metric.id, metric.type));
+                }
+            }
+        });
     });
     loadMatrixValues();
 }
 
-window.updateRowTotal = function(metricId, metricType) {
+function updateRowTotal(metricId, metricType) {
     let sum = 0;
     for (let w = 1; w <= 4; w++) {
-        const input = document.getElementById(`form-${metric.id}-week${w}`);
-        sum += num(input.value);
+        const input = document.getElementById(`form-${metricId}-week${w}`);
+        if(input) sum += num(input.value);
     }
-    document.getElementById(`total-${metricId}`).textContent = formatValue(sum, metricType);
+    const totalEl = document.getElementById(`total-${metricId}`);
+    if(totalEl) totalEl.textContent = formatValue(sum, metricType);
 };
 
 function loadMatrixValues() {
@@ -1116,13 +1164,8 @@ async function saveMatrix() {
         if (!allData[monthId][`week${w}`]) allData[monthId][`week${w}`] = {};
         METRICS_DEFINITIONS.filter(m => m.is_input).forEach(metric => {
             const input = document.getElementById(`form-${metric.id}-week${w}`);
-            allData[monthId][`week${w}`][metric.id] = num(input.value);
-            
-            if (metric.id === 'gasto_google' && num(input.value) > 0 && num(document.getElementById('form-leads_google-week' + w).value) === 0) {
-                showToast(`Atenção (Sem. ${w}): Gasto no Google sem leads registados.`, 'warning');
-            }
-            if (metric.id === 'protocolos_primeira' && num(input.value) > 0 && num(document.getElementById('form-qtd_primeira-week' + w).value) === 0) {
-                showToast(`Atenção (Sem. ${w}): Protocolos registados sem nenhuma 1ª consulta.`, 'danger');
+            if (input) {
+                 allData[monthId][`week${w}`][metric.id] = num(input.value);
             }
         });
     }
