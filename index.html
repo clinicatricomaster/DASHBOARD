@@ -22,18 +22,47 @@
             --warning: #b45309;
         }
         html { font-family: 'Inter', sans-serif; }
-        body { margin: 0; display: flex; height: 100vh; background: var(--bg-light-gray); color: var(--text-dark-gray); overflow: hidden; }
-        .sidebar { width: 256px; background: var(--primary-green); color: #fff; display: flex; flex-direction: column; position: fixed; height: 100%; flex-shrink: 0; }
-        .sidebar .logo { padding: 24px; font-size: 1.5rem; font-weight: 700; text-align: center; }
-        .sidebar nav ul { list-style: none; padding: 0; margin: 0; }
-        .sidebar nav li { cursor: pointer; }
-        .sidebar nav a { display: flex; align-items: center; gap: 12px; padding: 12px 24px; color: #fff; text-decoration: none; font-weight: 500; pointer-events: none; }
-        .sidebar nav li:hover { background: rgba(255, 255, 255, .1); }
-        .sidebar nav .active { background: var(--accent-gold); }
-        .sidebar nav .active a { color: var(--primary-green); }
-        .main-content { margin-left: 256px; flex-grow: 1; display: flex; flex-direction: column; overflow-y: auto; }
-        header { background: var(--card-white); color: var(--text-dark-gray); padding: 16px 32px; position: sticky; top: 0; z-index: 10; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; }
-        header h1 { margin: 0; font-size: 1.25rem; font-weight: 600; }
+        body { margin: 0; background: var(--bg-light-gray); color: var(--text-dark-gray); }
+        
+        header { 
+            background: var(--primary-green); 
+            color: white; 
+            padding: 0 32px; 
+            position: sticky; 
+            top: 0; 
+            z-index: 10; 
+            border-bottom: 1px solid #0f3b2c; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
+            height: 64px;
+        }
+        .header-left { display: flex; align-items: center; gap: 32px; }
+        .header-left .logo { font-size: 1.5rem; font-weight: 700; color: white; }
+        header nav ul { list-style: none; padding: 0; margin: 0; display: flex; gap: 8px; }
+        header nav a { 
+            display: block;
+            padding: 8px 16px; 
+            color: white; 
+            text-decoration: none; 
+            font-weight: 600;
+            border-radius: 8px;
+            transition: background-color 0.2s;
+        }
+        header nav a:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+        header nav li.active a { 
+            background-color: var(--accent-gold);
+            color: var(--primary-green);
+        }
+
+        .main-content {
+            height: calc(100vh - 64px);
+            overflow-y: auto;
+        }
+
         main { padding: 32px; }
         .page { display: none; }
         .page.active { display: block; }
@@ -47,7 +76,7 @@
         .btn { padding: 10px 16px; border-radius: 10px; border: none; font-size: 0.95rem; font-weight: 700; cursor: pointer; transition: transform .05s ease, filter .15s; }
         .btn:active { transform: scale(0.99); }
         .btn-primary { background: var(--primary-green); color: #fff; }
-        .btn-secondary { background: var(--accent-gold); color: var(--primary-green); }
+        .btn-secondary { background: var(--accent-gold); color: white; }
         .btn-danger { background: var(--danger); color: #fff; }
         .table-wrapper { overflow-x: auto; overflow-y: visible; }
         .comparison-table { width: max-content; min-width: 100%; border-collapse: collapse; table-layout: fixed; }
@@ -87,8 +116,8 @@
         /* Impressão */
         @media print {
             body { display: block; height: auto; overflow: visible; background: #fff; }
-            .sidebar, header, .filters, .btn, #toast-container, nav { display: none !important; }
-            .main-content { margin-left: 0; }
+            header, .filters, .btn, #toast-container { display: none !important; }
+            .main-content { height: auto; overflow: visible; }
             main { padding: 10px; }
             .page { display: block !important; }
             .card { box-shadow: none; border: 1px solid #ddd; border-radius: 0; page-break-inside: avoid; }
@@ -103,22 +132,23 @@
     </style>
 </head>
 <body>
-    <div class="sidebar">
-        <div class="logo"><h2>Tricomaster v2</h2></div>
-        <nav>
-            <ul>
-                <li id="nav-dashboard" data-page="dashboard"><a href="#">Dashboard</a></li>
-                <li id="nav-comparativo" data-page="comparativo"><a href="#">Comparativo</a></li>
-                <li id="nav-comparativo-detalhado" data-page="comparativo-detalhado"><a href="#">Comparativo Detalhado</a></li>
-                <li id="nav-config" data-page="config"><a href="#">Lançar Dados</a></li>
-            </ul>
-        </nav>
-    </div>
-    <div class="main-content">
-        <header>
-            <h1 id="page-title">Dashboard</h1>
+    <header>
+        <div class="header-left">
+            <div class="logo">Tricomaster v2</div>
+            <nav>
+                <ul>
+                    <li id="nav-dashboard" data-page="dashboard"><a href="#">Dashboard</a></li>
+                    <li id="nav-comparativo" data-page="comparativo"><a href="#">Comparativo</a></li>
+                    <li id="nav-comparativo-detalhado" data-page="comparativo-detalhado"><a href="#">Comp. Detalhado</a></li>
+                    <li id="nav-config" data-page="config"><a href="#">Lançar Dados</a></li>
+                </ul>
+            </nav>
+        </div>
+        <div class="header-right">
             <button id="print-btn" class="btn btn-secondary">Imprimir Relatório</button>
-        </header>
+        </div>
+    </header>
+    <div class="main-content">
         <main>
             <div class="print-header">
                 <h1>Relatório de Performance - Tricomaster</h1>
@@ -427,7 +457,7 @@ function showPage(pageId) {
     document.querySelectorAll('nav li').forEach(l => l.classList.remove('active'));
     document.getElementById(`nav-${pageId}`).classList.add('active');
     const pageTitle = document.querySelector(`#nav-${pageId} a`).textContent;
-    document.getElementById('page-title').textContent = pageTitle;
+    
     document.getElementById('print-btn').style.display = pageId === 'dashboard' ? 'block' : 'none';
 
     if (pageId === 'dashboard') renderDashboard();
@@ -1229,4 +1259,5 @@ async function importAllData(event) {
 </script>
 </body>
 </html>
+
 
